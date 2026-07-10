@@ -177,6 +177,8 @@ int main()
         OnFrame();
 
         bool ShouldUpdate = false;
+        static int knifeRetryCount = 0;
+        static int gloveRetryCount = 0;
 
         const uint8_t team = mem.Read<uint8_t>(localPlayer + Offsets::m_iTeamNum);
 
@@ -193,14 +195,22 @@ int main()
             {
                 const auto& knifeConfig = (team == 3) ? BaseConfig::CtKnifeConfig : BaseConfig::TKnifeConfig;
 
-                // Only write if def doesn't match target or force update
-                if (weaponDefRaw != knifeConfig.defIndex || ForceUpdate)
-                {
-                    std::cout << "[Knife] Team=" << (int)team
-                              << " OrigDef=" << weaponDefRaw
-                              << " -> TargetDef=" << knifeConfig.defIndex
-                              << " Paint=" << knifeConfig.paint << std::endl;
+                // Check current subclass to see if model has loaded
+                const uint32_t currentSubclass = mem.Read<uint32_t>(weapon + Offsets::m_nSubclassID);
+                const bool needsDef = (weaponDefRaw != knifeConfig.defIndex);
+                const bool needsSubclass = (currentSubclass != knifeConfig.subclassId);
 
+                if (needsDef || needsSubclass || ForceUpdate)
+                {
+                    knifeRetryCount++;
+                    std::cout << "[Knife] Attempt #" << knifeRetryCount
+                              << " Team=" << (int)team
+                              << " Def=" << weaponDefRaw << "->" << knifeConfig.defIndex
+                              << " Subclass=0x" << std::hex << currentSubclass << "->0x" << knifeConfig.subclassId << std::dec
+                              << " Paint=" << knifeConfig.paint
+                              << " Entity=0x" << std::hex << weapon << std::dec << std::endl;
+
+                    // Write item definition + fallback values
                     mem.Write<uint16_t>(item + Offsets::m_iItemDefinitionIndex, knifeConfig.defIndex);
                     mem.Write<uint32_t>(item + Offsets::m_iItemIDHigh, -1);
                     mem.Write<uint32_t>(weapon + Offsets::m_nFallbackPaintKit, knifeConfig.paint);
@@ -208,10 +218,35 @@ int main()
                     mem.Write<float>(weapon + Offsets::m_flFallbackWear, 0.0001f);
                     mem.Write<int32_t>(item + Offsets::m_iEntityQuality, 3);
                     mem.Write<uint32_t>(item + Offsets::m_iAccountID, 1);
+                    mem.Write<uint32_t>(weapon + Offsets::m_OriginalOwnerXuidLow, 1);
+
+                    // Force model change: write correct subclass ID (CUtlStringToken)
+                    // This tells the entity system what model to use
+                    mem.Write<uint32_t>(weapon + Offsets::m_nSubclassID, knifeConfig.subclassId);
+                    std::cout << "[Knife] Wrote subclass 0x" << std::hex << knifeConfig.subclassId << std::dec << std::endl;
+
+                    // Trigger entity update via identity flags
+                    const uintptr_t identity = mem.Read<uintptr_t>(weapon + Offsets::m_pEntity);
+                    if (identity)
+                    {
+                        // Clear then restore flags to force entity system to reprocess
+                        const uint32_t prevFlags = mem.Read<uint32_t>(identity + Offsets::m_flags);
+                        mem.Write<uint32_t>(identity + Offsets::m_flags, 0);
+                        std::cout << "[Knife] Entity identity flags: " << prevFlags << " -> 0 (cleared)" << std::endl;
+                    }
 
                     econItemAttributeManager.Create(item, SkinInfo_t{ static_cast<int>(knifeConfig.paint), false, knifeConfig.name, WeaponsEnum::CtKnife });
 
                     ShouldUpdate = true;
+                }
+                else
+                {
+                    // Knife is applied — reset retry counter
+                    if (knifeRetryCount > 0)
+                    {
+                        std::cout << "[Knife] Model applied successfully after " << knifeRetryCount << " attempts" << std::endl;
+                        knifeRetryCount = 0;
+                    }
                 }
                 continue; // skip normal skin flow for knives
             }
@@ -251,10 +286,13 @@ int main()
 
             if (currentGloveDef != gloveConfig.defIndex || ForceUpdate)
             {
-                std::cout << "[Gloves] Team=" << (int)team
+                gloveRetryCount++;
+                std::cout << "[Gloves] Attempt #" << gloveRetryCount
+                          << " Team=" << (int)team
                           << " CurrentDef=" << currentGloveDef
                           << " -> TargetDef=" << gloveConfig.defIndex
-                          << " Paint=" << gloveConfig.paint << std::endl;
+                          << " Paint=" << gloveConfig.paint
+                          << " Pawn=0x" << std::hex << localPlayer << std::dec << std::endl;
 
                 mem.Write<uint16_t>(glovesItem + Offsets::m_iItemDefinitionIndex, gloveConfig.defIndex);
                 mem.Write<uint32_t>(glovesItem + Offsets::m_iItemIDHigh, -1);
@@ -265,12 +303,27 @@ int main()
                 econItemAttributeManager.Create(glovesItem, SkinInfo_t{ static_cast<int>(gloveConfig.paint), false, gloveConfig.name, WeaponsEnum::none });
 
                 mem.Write<bool>(localPlayer + Offsets::m_bNeedToReApplyGloves, true);
+                std::cout << "[Gloves] Wrote def=" << gloveConfig.defIndex
+                          << " paint=" << gloveConfig.paint
+                          << " NeedToReApply=true" << std::endl;
                 ShouldUpdate = true;
+            }
+            else
+            {
+                if (gloveRetryCount > 0)
+                {
+                    std::cout << "[Gloves] Applied successfully after " << gloveRetryCount << " attempts" << std::endl;
+                    gloveRetryCount = 0;
+                }
             }
         }
 
         if (ShouldUpdate || ForceUpdate)
+        {
+            std::cout << "[Update] Calling RegenerateWeaponSkins via CreateRemoteThread..." << std::endl;
             UpdateWeapons(weapons);
+            std::cout << "[Update] RegenerateWeaponSkins completed" << std::endl;
+        }
 
         ForceUpdate = false;
     }
