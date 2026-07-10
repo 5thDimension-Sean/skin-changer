@@ -218,37 +218,20 @@ int main()
 
                     econItemAttributeManager.Create(item, SkinInfo_t{ static_cast<int>(knifeConfig.paint), false, knifeConfig.name, WeaponsEnum::CtKnife });
 
-                    // --- MODEL DIAGNOSTICS + DIRECT MODEL STATE MANIPULATION ---
+                    // --- MODEL SWAP: Try vtable[8] and vtable[9] (real SetModel candidates) ---
                     const uintptr_t node = mem.Read<uintptr_t>(weapon + Offsets::m_pGameSceneNode);
                     if (node && !knifeModelApplied)
                     {
                         const uintptr_t modelState = node + Offsets::m_modelState;
-
-                        // Read current model info BEFORE any changes
                         const uintptr_t hModelBefore = mem.Read<uintptr_t>(modelState + Offsets::m_hModel);
-                        const uintptr_t modelNamePtr = mem.Read<uintptr_t>(modelState + Offsets::m_ModelName);
-
-                        // Read current model name string (CUtlSymbolLarge = const char*)
-                        char currentModelName[128] = {};
-                        if (modelNamePtr)
-                        {
-                            for (int i = 0; i < 127; i++)
-                            {
-                                currentModelName[i] = mem.Read<char>(modelNamePtr + i);
-                                if (!currentModelName[i]) break;
-                            }
-                        }
-                        std::cout << "[ModelState] BEFORE:" << std::endl;
-                        std::cout << "[ModelState]   m_hModel = 0x" << std::hex << hModelBefore << std::dec << std::endl;
-                        std::cout << "[ModelState]   m_ModelName ptr = 0x" << std::hex << modelNamePtr << std::dec << std::endl;
-                        std::cout << "[ModelState]   m_ModelName str = \"" << currentModelName << "\"" << std::endl;
-                        std::cout << "[ModelState]   m_nSubclassID = 0x" << std::hex << mem.Read<uint32_t>(weapon + Offsets::m_nSubclassID) << std::dec << std::endl;
+                        std::cout << "[ModelSwap] m_hModel BEFORE = 0x" << std::hex << hModelBefore << std::dec << std::endl;
+                        std::cout << "[ModelSwap] Target path: " << knifeConfig.modelPath << std::endl;
 
                         // Allocate model path in game memory (once)
                         if (!modelPathAlloc)
                         {
                             modelPathAlloc = mem.Allocate(0, 512);
-                            std::cout << "[ModelState] Allocated path buffer: 0x" << std::hex << modelPathAlloc << std::dec << std::endl;
+                            std::cout << "[ModelSwap] Path buffer: 0x" << std::hex << modelPathAlloc << std::dec << std::endl;
                         }
 
                         if (modelPathAlloc)
@@ -257,63 +240,90 @@ int main()
                             mem.WriteString(modelPathAlloc, modelStr);
                             mem.Write<char>(modelPathAlloc + modelStr.size(), '\0');
 
-                            // 1. Write m_ModelName pointer to our butterfly path string
-                            mem.Write<uintptr_t>(modelState + Offsets::m_ModelName, modelPathAlloc);
-                            std::cout << "[ModelState] Wrote m_ModelName -> \"" << knifeConfig.modelPath << "\"" << std::endl;
+                            const uintptr_t vtable = mem.Read<uintptr_t>(weapon);
 
-                            // 2. Zero subclass to force re-evaluation
-                            mem.Write<uint32_t>(weapon + Offsets::m_nSubclassID, 0);
-                            std::cout << "[ModelState] Wrote m_nSubclassID = 0" << std::endl;
+                            // Try vtable[8] first (40 53 48 83 ec 20 48 8b = push rbx; sub rsp,20; mov...)
+                            uintptr_t fn8 = mem.GetVtableFunc(vtable, 8);
+                            std::cout << "[ModelSwap] Trying vtable[8] = 0x" << std::hex << fn8 << std::dec << std::endl;
 
-                            // 3. Try vtable[20] call with correct path (confirmed safe)
-                            if (!setModelScanned)
-                            {
-                                setModelScanned = true;
-                                const uintptr_t vtable = mem.Read<uintptr_t>(weapon);
-                                if (vtable)
-                                {
-                                    setModelFn = mem.GetVtableFunc(vtable, 20);
-                                    std::cout << "[ModelState] Vtable[20] = 0x" << std::hex << setModelFn << std::dec << std::endl;
-                                }
-                            }
-
-                            if (setModelFn)
-                            {
-                                // x64 shellcode: func(this=weapon, path=modelPathAlloc)
+                            // Build shellcode: func(this=weapon, path=modelPathAlloc)
+                            auto buildShellcode = [&](uintptr_t thisPtr, uintptr_t arg1, uintptr_t funcAddr) -> std::vector<uint8_t> {
                                 std::vector<uint8_t> sc;
                                 sc.push_back(0x48); sc.push_back(0x83); sc.push_back(0xEC); sc.push_back(0x28);
                                 sc.push_back(0x48); sc.push_back(0xB9);
-                                for (int i = 0; i < 8; i++) sc.push_back((uint8_t)((weapon >> (i*8)) & 0xFF));
+                                for (int i = 0; i < 8; i++) sc.push_back((uint8_t)((thisPtr >> (i*8)) & 0xFF));
                                 sc.push_back(0x48); sc.push_back(0xBA);
-                                for (int i = 0; i < 8; i++) sc.push_back((uint8_t)((modelPathAlloc >> (i*8)) & 0xFF));
+                                for (int i = 0; i < 8; i++) sc.push_back((uint8_t)((arg1 >> (i*8)) & 0xFF));
                                 sc.push_back(0x48); sc.push_back(0xB8);
-                                for (int i = 0; i < 8; i++) sc.push_back((uint8_t)((setModelFn >> (i*8)) & 0xFF));
+                                for (int i = 0; i < 8; i++) sc.push_back((uint8_t)((funcAddr >> (i*8)) & 0xFF));
                                 sc.push_back(0xFF); sc.push_back(0xD0);
                                 sc.push_back(0x48); sc.push_back(0x83); sc.push_back(0xC4); sc.push_back(0x28);
                                 sc.push_back(0x31); sc.push_back(0xC0); sc.push_back(0xC3);
+                                return sc;
+                            };
 
-                                uintptr_t code = mem.MakeFunction(sc, setModelFn);
+                            if (fn8)
+                            {
+                                auto sc = buildShellcode(weapon, modelPathAlloc, fn8);
+                                uintptr_t code = mem.MakeFunction(sc, fn8);
                                 if (code)
                                 {
                                     mem.CallThread(code);
-                                    std::cout << "[ModelState] Vtable[20] called OK" << std::endl;
                                     mem.Free(code);
+                                }
+
+                                uintptr_t hModelAfter8 = mem.Read<uintptr_t>(modelState + Offsets::m_hModel);
+                                std::cout << "[ModelSwap] After vtable[8]: m_hModel = 0x" << std::hex << hModelAfter8 << std::dec;
+                                if (hModelAfter8 != hModelBefore) std::cout << " (CHANGED!)";
+                                else std::cout << " (unchanged)";
+                                std::cout << std::endl;
+
+                                // If vtable[8] worked, we're done
+                                if (hModelAfter8 != hModelBefore)
+                                {
+                                    std::cout << "[ModelSwap] SUCCESS via vtable[8]!" << std::endl;
+                                    knifeModelApplied = true;
                                 }
                             }
 
-                            // Read AFTER state
-                            const uintptr_t hModelAfter = mem.Read<uintptr_t>(modelState + Offsets::m_hModel);
-                            const uintptr_t modelNamePtrAfter = mem.Read<uintptr_t>(modelState + Offsets::m_ModelName);
-                            std::cout << "[ModelState] AFTER:" << std::endl;
-                            std::cout << "[ModelState]   m_hModel = 0x" << std::hex << hModelAfter << std::dec;
-                            if (hModelAfter != hModelBefore)
-                                std::cout << " (CHANGED!)";
-                            else
-                                std::cout << " (unchanged)";
-                            std::cout << std::endl;
-                            std::cout << "[ModelState]   m_ModelName ptr = 0x" << std::hex << modelNamePtrAfter << std::dec << std::endl;
+                            // If vtable[8] didn't change model, try vtable[9]
+                            if (!knifeModelApplied)
+                            {
+                                uintptr_t fn9 = mem.GetVtableFunc(vtable, 9);
+                                std::cout << "[ModelSwap] Trying vtable[9] = 0x" << std::hex << fn9 << std::dec << std::endl;
 
-                            knifeModelApplied = true;
+                                if (fn9)
+                                {
+                                    auto sc = buildShellcode(weapon, modelPathAlloc, fn9);
+                                    uintptr_t code = mem.MakeFunction(sc, fn9);
+                                    if (code)
+                                    {
+                                        mem.CallThread(code);
+                                        mem.Free(code);
+                                    }
+
+                                    uintptr_t hModelAfter9 = mem.Read<uintptr_t>(modelState + Offsets::m_hModel);
+                                    std::cout << "[ModelSwap] After vtable[9]: m_hModel = 0x" << std::hex << hModelAfter9 << std::dec;
+                                    if (hModelAfter9 != hModelBefore) std::cout << " (CHANGED!)";
+                                    else std::cout << " (unchanged)";
+                                    std::cout << std::endl;
+
+                                    if (hModelAfter9 != hModelBefore)
+                                    {
+                                        std::cout << "[ModelSwap] SUCCESS via vtable[9]!" << std::endl;
+                                        knifeModelApplied = true;
+                                    }
+                                }
+                            }
+
+                            // If neither worked, also zero subclass for diagnostics
+                            if (!knifeModelApplied)
+                            {
+                                mem.Write<uint32_t>(weapon + Offsets::m_nSubclassID, 0);
+                                std::cout << "[ModelSwap] Neither vtable[8] nor [9] changed m_hModel." << std::endl;
+                                std::cout << "[ModelSwap] Wrote m_nSubclassID=0, will need different approach." << std::endl;
+                                knifeModelApplied = true; // don't spam retries
+                            }
                         }
                     }
 
