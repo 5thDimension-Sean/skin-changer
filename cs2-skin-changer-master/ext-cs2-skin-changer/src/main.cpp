@@ -1,4 +1,5 @@
 #include "menu.h"
+#include "baseConfig.h"
 #include "SDK/entity/CWeaponServices.h"
 #include "SDK/weapon/C_EconEntity.h"
 #include "SDK/CEconItemAttributeManager.h"
@@ -153,7 +154,9 @@ int main()
 
     mem.Write<uint16_t>(Sigs::RegenerateWeaponSkins + 0x52, Offsets::m_AttributeManager + Offsets::m_Item + Offsets::m_AttributeList + Offsets::m_Attributes);
     skindb->Dump();
-    
+
+    BaseConfig::ApplyBaseConfig();
+
     InitMenu();
     
     std::cout << "SkinChanger Started\n";

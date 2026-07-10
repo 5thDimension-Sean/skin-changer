@@ -163,26 +163,23 @@ void RenderMenu()
 	ImGui::End();
 }
 
+bool MenuOpen = true;
 void OnFrame()
 {
+	if (GetAsyncKeyState(VK_DELETE) & 1)
+		MenuOpen = !MenuOpen;
+
     overlay::Render();
-    RenderMenu();
+    if (MenuOpen)
+        RenderMenu();
     overlay::EndRender();
 }
 
-bool MenuOpen = true;
 void MenuThread()
 {
 	while (true)
 	{
 		Sleep(10);
-
-		if (GetAsyncKeyState(VK_DELETE) & 1)
-			MenuOpen = !MenuOpen;
-        
-		if (!MenuOpen)
-			continue;
-
         OnFrame();
 	}
 }
