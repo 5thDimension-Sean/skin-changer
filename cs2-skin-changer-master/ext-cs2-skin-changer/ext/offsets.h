@@ -65,6 +65,7 @@ namespace Offsets
     constexpr std::ptrdiff_t m_szCustomNameOverride = cs2_dumper::schemas::client_dll::C_EconItemView::m_szCustomNameOverride; // char[161]
     constexpr std::ptrdiff_t m_iItemIDHigh = cs2_dumper::schemas::client_dll::C_EconItemView::m_iItemIDHigh; // uint32
 
+    constexpr std::ptrdiff_t m_ModelName = cs2_dumper::schemas::client_dll::CModelState::m_ModelName; // CUtlSymbolLarge (const char*)
     constexpr std::ptrdiff_t m_pDirtyModelData = 0xD8;
     constexpr std::ptrdiff_t m_DrityMeshGroupMask = 0x10;
 }
