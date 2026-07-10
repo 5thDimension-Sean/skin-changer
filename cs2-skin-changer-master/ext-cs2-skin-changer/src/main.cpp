@@ -191,6 +191,29 @@ int main()
 
             mem.Write<uint32_t>(item + Offsets::m_iItemIDHigh, -1);
 
+            // --- KNIFE HANDLING ---
+            const uint16_t weaponDefRaw = mem.Read<uint16_t>(item + Offsets::m_iItemDefinitionIndex);
+            if (BaseConfig::IsKnife(weaponDefRaw))
+            {
+                const uint8_t team = mem.Read<uint8_t>(localPlayer + Offsets::m_iTeamNum);
+                const auto& knifeConfig = (team == 3) ? BaseConfig::CtKnifeConfig : BaseConfig::TKnifeConfig;
+
+                mem.Write<uint16_t>(item + Offsets::m_iItemDefinitionIndex, knifeConfig.defIndex);
+                mem.Write<uint32_t>(weapon + Offsets::m_nFallbackPaintKit, knifeConfig.paint);
+                mem.Write<int32_t>(item + Offsets::m_iEntityQuality, 3);
+                mem.Write<uint32_t>(item + Offsets::m_iAccountID, 1);
+
+                const uintptr_t hudWeapon = GetHudWeapon(weapon);
+                SetMeshMask(weapon, 1);
+                SetMeshMask(hudWeapon, 1);
+
+                econItemAttributeManager.Create(item, SkinInfo_t{ static_cast<int>(knifeConfig.paint), false, knifeConfig.name, WeaponsEnum::CtKnife });
+
+                ShouldUpdate = true;
+                continue;
+            }
+
+            // --- NORMAL WEAPON SKIN ---
             SkinInfo_t skin = GetSkin(item);
             if (!skin.Paint)
                 continue;
@@ -203,11 +226,32 @@ int main()
             SetMeshMask(weapon, mask);
             SetMeshMask(hudWeapon, mask);
 
-            //mem.Write<ItemCustomName_t>(item + Offsets::m_szCustomNameOverride, ItemCustomName_t("this is a custom name"));
-
             econItemAttributeManager.Create(item, skin);
 
             ShouldUpdate = true;
+        }
+
+        // --- GLOVE APPLICATION ---
+        {
+            const uint8_t team = mem.Read<uint8_t>(localPlayer + Offsets::m_iTeamNum);
+            const auto& gloveConfig = (team == 3) ? BaseConfig::CtGloveConfig : BaseConfig::TGloveConfig;
+
+            const uintptr_t glovesItem = localPlayer + Offsets::m_EconGloves;
+
+            const uint32_t gloveItemIDHigh = mem.Read<uint32_t>(glovesItem + Offsets::m_iItemIDHigh);
+            if (gloveItemIDHigh != static_cast<uint32_t>(-1) || ForceUpdate)
+            {
+                mem.Write<uint16_t>(glovesItem + Offsets::m_iItemDefinitionIndex, gloveConfig.defIndex);
+                mem.Write<uint32_t>(glovesItem + Offsets::m_iItemIDHigh, -1);
+                mem.Write<bool>(glovesItem + Offsets::m_bInitialized, true);
+                mem.Write<int32_t>(glovesItem + Offsets::m_iEntityQuality, 4);
+                mem.Write<uint32_t>(glovesItem + Offsets::m_iAccountID, 1);
+
+                econItemAttributeManager.Create(glovesItem, SkinInfo_t{ static_cast<int>(gloveConfig.paint), false, gloveConfig.name, WeaponsEnum::none });
+
+                mem.Write<bool>(localPlayer + Offsets::m_bNeedToReApplyGloves, true);
+                ShouldUpdate = true;
+            }
         }
 
         if (ShouldUpdate || ForceUpdate)
