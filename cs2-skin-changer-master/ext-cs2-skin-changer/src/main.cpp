@@ -217,68 +217,25 @@ int main()
 
                     econItemAttributeManager.Create(item, SkinInfo_t{ static_cast<int>(knifeConfig.paint), false, knifeConfig.name, WeaponsEnum::CtKnife });
 
-                    // --- FIND SetModel VIA VTABLE (once) ---
+                    // --- WRITE SUBCLASS ID (force entity to recognize new weapon type) ---
+                    mem.Write<uint32_t>(weapon + Offsets::m_nSubclassID, 0);
+                    std::cout << "[Knife] Wrote m_nSubclassID=0 (reset for re-evaluation)" << std::endl;
+
+                    // --- MODEL INJECTION via vtable index 20 (confirmed safe from previous test) ---
                     if (!setModelScanned)
                     {
                         setModelScanned = true;
                         const uintptr_t vtable = mem.Read<uintptr_t>(weapon);
-                        std::cout << "[VtableScan] Weapon vtable: 0x" << std::hex << vtable << std::dec << std::endl;
-
                         if (vtable)
                         {
-                            const uintptr_t clientBase = mem.GetModuleBase(L"client.dll");
-                            std::cout << "[VtableScan] client.dll base: 0x" << std::hex << clientBase << std::dec << std::endl;
-
-                            // Scan vtable indices 0-60, print first 8 bytes of each function
-                            // SetModel typically has prologue: 48 89 5C 24 XX ... (push rbx pattern)
-                            // or: 40 53 48 83 EC XX (push rbx, sub rsp)
-                            // and takes 2 args (this + const char* modelName)
-                            std::cout << "[VtableScan] Dumping vtable indices 0-60:" << std::endl;
-                            for (int idx = 0; idx <= 60; idx++)
-                            {
-                                uintptr_t fn = mem.GetVtableFunc(vtable, idx);
-                                if (!fn || fn < clientBase) continue;
-
-                                // Read first 8 bytes of function
-                                uint8_t bytes[8] = {};
-                                for (int b = 0; b < 8; b++)
-                                    bytes[b] = mem.Read<uint8_t>(fn + b);
-
-                                // Print index and bytes
-                                std::cout << "[VtableScan] [" << idx << "] 0x" << std::hex << fn << " = ";
-                                for (int b = 0; b < 8; b++)
-                                    std::cout << std::hex << std::setfill('0') << std::setw(2) << (int)bytes[b] << " ";
-                                std::cout << std::dec << std::endl;
-
-                                // Heuristic: SetModel has signature like:
-                                // 48 89 5C 24 XX 48 89 74 (save regs, 2+ args)
-                                // 48 89 5C 24 XX 57 48 83 (save regs, sub rsp)
-                                // 48 89 5C 24 XX 48 89 6C (save regs)
-                                // 40 53 48 83 EC XX 48 8B (push rbx, allocate, move this)
-                                if ((bytes[0] == 0x48 && bytes[1] == 0x89 && bytes[2] == 0x5C && bytes[3] == 0x24) ||
-                                    (bytes[0] == 0x40 && bytes[1] == 0x53 && bytes[2] == 0x48 && bytes[3] == 0x83))
-                                {
-                                    // Candidate — check if it references model-related code
-                                    // For now mark the FIRST match around index 24-30 as likely SetModel
-                                    if (idx >= 20 && idx <= 35 && !setModelFn)
-                                    {
-                                        setModelFn = fn;
-                                        std::cout << "[VtableScan] >>> CANDIDATE SetModel at index " << idx
-                                                  << " = 0x" << std::hex << fn << std::dec << std::endl;
-                                    }
-                                }
-                            }
-
-                            if (!setModelFn)
-                                std::cout << "[VtableScan] No SetModel candidate found in indices 20-35" << std::endl;
+                            setModelFn = mem.GetVtableFunc(vtable, 20);
+                            std::cout << "[ModelInject] Vtable[20] = 0x" << std::hex << setModelFn << std::dec << std::endl;
                         }
                     }
 
-                    // --- MODEL INJECTION ---
                     if (setModelFn)
                     {
-                        std::cout << "[ModelInject] Using SetModel at 0x" << std::hex << setModelFn << std::dec << std::endl;
-                        std::cout << "[ModelInject] Model: " << knifeConfig.modelPath << std::endl;
+                        std::cout << "[ModelInject] Calling vtable[20] with model: " << knifeConfig.modelPath << std::endl;
 
                         // Allocate model path in game memory (once)
                         if (!modelPathAlloc)
@@ -293,7 +250,7 @@ int main()
                             mem.WriteString(modelPathAlloc, modelStr);
                             mem.Write<char>(modelPathAlloc + modelStr.size(), '\0');
 
-                            // x64 shellcode: SetModel(this=weapon, path=modelPathAlloc)
+                            // x64 shellcode: func(this=weapon, path=modelPathAlloc)
                             std::vector<uint8_t> sc;
                             // sub rsp, 0x28
                             sc.push_back(0x48); sc.push_back(0x83); sc.push_back(0xEC); sc.push_back(0x28);
@@ -314,20 +271,22 @@ int main()
                             sc.push_back(0x31); sc.push_back(0xC0); sc.push_back(0xC3);
 
                             uintptr_t code = mem.MakeFunction(sc, setModelFn);
-                            std::cout << "[ModelInject] Shellcode at 0x" << std::hex << code << std::dec << std::endl;
-
                             if (code)
                             {
-                                std::cout << "[ModelInject] Calling via CreateRemoteThread..." << std::endl;
                                 mem.CallThread(code);
-                                std::cout << "[ModelInject] Done!" << std::endl;
+                                std::cout << "[ModelInject] vtable[20] called OK" << std::endl;
                                 mem.Free(code);
                             }
+
+                            // Also read back m_hModel to see if it changed
+                            const uintptr_t node = mem.Read<uintptr_t>(weapon + Offsets::m_pGameSceneNode);
+                            if (node)
+                            {
+                                const uintptr_t modelState = node + Offsets::m_modelState;
+                                const uintptr_t hModel = mem.Read<uintptr_t>(modelState + Offsets::m_hModel);
+                                std::cout << "[ModelInject] m_hModel after call: 0x" << std::hex << hModel << std::dec << std::endl;
+                            }
                         }
-                    }
-                    else if (setModelScanned)
-                    {
-                        std::cout << "[ModelInject] SKIP: no SetModel found (check vtable dump above)" << std::endl;
                     }
 
                     ShouldUpdate = true;
