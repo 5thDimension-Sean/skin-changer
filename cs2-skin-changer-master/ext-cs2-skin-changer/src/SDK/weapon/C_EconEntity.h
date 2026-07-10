@@ -104,25 +104,22 @@ SkinInfo_t GetSkin(const uintptr_t item)
 void SetMeshMask(const uintptr_t ent, const uint64_t mask)
 {
     const auto& node = mem.Read<uintptr_t>(ent + Offsets::m_pGameSceneNode);
-    const auto model = node + Offsets::m_modelState;
-    const auto dirtyAttributes = mem.Read<uintptr_t>(model + Offsets::m_pDirtyModelData);
-
-    mem.Write<uint64_t>(dirtyAttributes + Offsets::m_DrityMeshGroupMask, mask);
-
-    bool updated = false;
-
-OverideMeshMaskNetvar:
-    for (int i = 0; i < 700; i++)
+    if (!node)
     {
-        mem.Write<uint64_t>(model + Offsets::m_MeshGroupMask, mask);
+        std::cout << "[Mesh] entity=0x" << std::hex << ent << std::dec
+                  << " has no scene node" << std::endl;
+        return;
     }
 
-    Sleep(5);
+    const auto model = node + Offsets::m_modelState;
+    const uint64_t before = mem.Read<uint64_t>(model + Offsets::m_MeshGroupMask);
+    mem.Write<uint64_t>(model + Offsets::m_MeshGroupMask, mask);
+    const uint64_t after = mem.Read<uint64_t>(model + Offsets::m_MeshGroupMask);
 
-    updated = mem.Read<uint64_t>(model + Offsets::m_MeshGroupMask) == mask;
-
-    if (!updated)
-        goto OverideMeshMaskNetvar;    
+    std::cout << "[Mesh] entity=0x" << std::hex << ent
+              << " node=0x" << node
+              << " mask=0x" << before << " -> 0x" << after
+              << std::dec << (after == mask ? " OK" : " FAILED") << std::endl;
 }
 
 void UpdateHud(const uintptr_t weapon, const uint32_t delay = 200)
@@ -145,6 +142,23 @@ void UpdateWeapons(const std::vector<uintptr_t> weapons)
     for (const uintptr_t& weapon : weapons)
     {
         const uintptr_t item = weapon + Offsets::m_AttributeManager + Offsets::m_Item;
+        const uint16_t definition =
+            mem.Read<uint16_t>(item + Offsets::m_iItemDefinitionIndex);
+        const bool isKnife =
+            definition == WeaponsEnum::CtKnife ||
+            definition == WeaponsEnum::Tknife ||
+            (definition >= 500 && definition <= 526);
+
+        if (isKnife)
+        {
+            std::cout << "[UpdateWeapons] preserving knife def=" << definition
+                      << " paint="
+                      << mem.Read<uint32_t>(weapon + Offsets::m_nFallbackPaintKit)
+                      << " attributes="
+                      << static_cast<int>(econItemAttributeManager.GetSize(item + Offsets::m_AttributeList))
+                      << std::endl;
+            continue;
+        }
         
         if (mem.Read<uint32_t>(weapon + Offsets::m_nFallbackPaintKit) == -1)
             continue;

@@ -18,6 +18,7 @@ namespace BaseConfig {
     struct KnifeConfig {
         uint16_t defIndex;
         uint32_t paint;
+        uint32_t subclassId;
         const char* name;
         const char* modelPath;
     };
@@ -29,13 +30,13 @@ namespace BaseConfig {
     };
 
     // CT: Butterfly Knife | Black Pearl Doppler + Sport Gloves | Pandora's Box
-    inline constexpr KnifeConfig CtKnifeConfig = { 515, 417, "Butterfly Black Pearl",
-        "phase2/weapons/models/knife/knife_butterfly/weapon_knife_butterfly_ag2.vmdl" };
+    inline constexpr KnifeConfig CtKnifeConfig = { 515, 417, 1353709123, "Butterfly Black Pearl",
+        "weapons/models/knife/knife_butterfly/weapon_knife_butterfly.vmdl" };
     inline constexpr GloveConfig CtGloveConfig = { 5030, 10037, "Pandora's Box" };
 
     // T: Butterfly Knife | Gamma Doppler Emerald + Sport Gloves | Hedge Maze
-    inline constexpr KnifeConfig TKnifeConfig = { 515, 568, "Butterfly Gamma Emerald",
-        "phase2/weapons/models/knife/knife_butterfly/weapon_knife_butterfly_ag2.vmdl" };
+    inline constexpr KnifeConfig TKnifeConfig = { 515, 568, 1353709123, "Butterfly Gamma Emerald",
+        "weapons/models/knife/knife_butterfly/weapon_knife_butterfly.vmdl" };
     inline constexpr GloveConfig TGloveConfig = { 5030, 10038, "Hedge Maze" };
 
     // --- PISTOLS ---
