@@ -201,18 +201,12 @@ int main()
             {
                 const auto& knifeConfig = (team == 3) ? BaseConfig::CtKnifeConfig : BaseConfig::TKnifeConfig;
 
-                // Check current subclass to see if model has loaded
-                const uint32_t currentSubclass = mem.Read<uint32_t>(weapon + Offsets::m_nSubclassID);
-                const bool needsDef = (weaponDefRaw != knifeConfig.defIndex);
-                const bool needsSubclass = (currentSubclass != knifeConfig.subclassId);
-
-                if (needsDef || needsSubclass || ForceUpdate)
+                if (weaponDefRaw != knifeConfig.defIndex || ForceUpdate)
                 {
                     knifeRetryCount++;
                     std::cout << "[Knife] Attempt #" << knifeRetryCount
                               << " Team=" << (int)team
                               << " Def=" << weaponDefRaw << "->" << knifeConfig.defIndex
-                              << " Subclass=0x" << std::hex << currentSubclass << "->0x" << knifeConfig.subclassId << std::dec
                               << " Paint=" << knifeConfig.paint
                               << " Entity=0x" << std::hex << weapon << std::dec << std::endl;
 
@@ -226,20 +220,9 @@ int main()
                     mem.Write<uint32_t>(item + Offsets::m_iAccountID, 1);
                     mem.Write<uint32_t>(weapon + Offsets::m_OriginalOwnerXuidLow, 1);
 
-                    // Force model change: write correct subclass ID (CUtlStringToken)
-                    // This tells the entity system what model to use
-                    mem.Write<uint32_t>(weapon + Offsets::m_nSubclassID, knifeConfig.subclassId);
-                    std::cout << "[Knife] Wrote subclass 0x" << std::hex << knifeConfig.subclassId << std::dec << std::endl;
-
-                    // Trigger entity update via identity flags
-                    const uintptr_t identity = mem.Read<uintptr_t>(weapon + Offsets::m_pEntity);
-                    if (identity)
-                    {
-                        // Clear then restore flags to force entity system to reprocess
-                        const uint32_t prevFlags = mem.Read<uint32_t>(identity + Offsets::m_flags);
-                        mem.Write<uint32_t>(identity + Offsets::m_flags, 0);
-                        std::cout << "[Knife] Entity identity flags: " << prevFlags << " -> 0 (cleared)" << std::endl;
-                    }
+                    std::cout << "[Knife] Wrote def=" << knifeConfig.defIndex
+                              << " paint=" << knifeConfig.paint
+                              << " quality=3 accountID=1" << std::endl;
 
                     econItemAttributeManager.Create(item, SkinInfo_t{ static_cast<int>(knifeConfig.paint), false, knifeConfig.name, WeaponsEnum::CtKnife });
 
@@ -250,7 +233,7 @@ int main()
                 {
                     if (knifeRetryCount > 0)
                     {
-                        std::cout << "[Knife] Subclass matched after " << knifeRetryCount << " attempts (model may still need full update)" << std::endl;
+                        std::cout << "[Knife] Def matches target (" << knifeConfig.defIndex << ") after " << knifeRetryCount << " attempts" << std::endl;
                         knifeRetryCount = 0;
                     }
                 }
@@ -333,9 +316,12 @@ int main()
         }
 
         // Force full client update to rebuild entities with new definitions (model swap)
+        // This causes the client to request a full state resync from server,
+        // which destroys and recreates all entities. Must wait for game to finish
+        // rebuilding before our next iteration accesses entity pointers.
         if (needsFullUpdate)
         {
-            Sleep(50); // small delay to let RegenerateWeaponSkins finish
+            Sleep(100); // let RegenerateWeaponSkins finish first
 
             const uintptr_t networkClient = mem.Read<uintptr_t>(engine2 + Offsets::dwNetworkGameClient);
             std::cout << "[FullUpdate] NetworkGameClient=0x" << std::hex << networkClient << std::dec << std::endl;
@@ -349,7 +335,13 @@ int main()
 
                 const int32_t verifyDelta = mem.Read<int32_t>(networkClient + Offsets::dwNetworkGameClient_deltaTick);
                 std::cout << "[FullUpdate] Verify deltaTick=" << verifyDelta << " (should be -1)" << std::endl;
-                std::cout << "[FullUpdate] Full update triggered — entities will rebuild next tick" << std::endl;
+                std::cout << "[FullUpdate] Full update triggered, waiting for entities to rebuild..." << std::endl;
+
+                // CRITICAL: Wait for the game to process the full update and rebuild entities.
+                // Without this, our next loop iteration uses stale entity pointers -> crash.
+                Sleep(500);
+
+                std::cout << "[FullUpdate] Wait complete, resuming" << std::endl;
             }
             else
             {
