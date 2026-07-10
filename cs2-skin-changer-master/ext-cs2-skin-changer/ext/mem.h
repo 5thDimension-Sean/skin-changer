@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <sstream>
 #include <cstdint>
+#include <iostream>
 #include <vector>
 
 #include "offsets.h"
@@ -478,16 +479,35 @@ public:
     }
 
     
-    void CallThread(uintptr_t funcAddress, LPVOID arg = nullptr)
+    bool CallThread(uintptr_t funcAddress, LPVOID arg = nullptr)
     {
         if (!funcAddress)
-            return;
+        {
+            std::cout << "[RemoteCall] rejected null function" << std::endl;
+            return false;
+        }
 
         HANDLE hThread = CreateThread(funcAddress, arg);
-        if (hThread) {
-            WaitForSingleObject(hThread, INFINITE);
-            CloseHandle(hThread);
+        if (!hThread)
+        {
+            std::cout << "[RemoteCall] CreateRemoteThread failed function=0x"
+                      << std::hex << funcAddress << std::dec
+                      << " error=" << GetLastError() << std::endl;
+            return false;
         }
+
+        const DWORD waitResult = WaitForSingleObject(hThread, INFINITE);
+        DWORD exitCode = 0;
+        const bool exitCodeRead = GetExitCodeThread(hThread, &exitCode) != FALSE;
+        CloseHandle(hThread);
+
+        std::cout << "[RemoteCall] function=0x" << std::hex << funcAddress
+                  << " argument=0x" << reinterpret_cast<uintptr_t>(arg)
+                  << " exit=0x" << exitCode << std::dec
+                  << " wait=" << waitResult
+                  << " exitCodeRead=" << exitCodeRead << std::endl;
+
+        return waitResult == WAIT_OBJECT_0 && exitCodeRead;
     }
 };
 //Memory* mem = new Memory();

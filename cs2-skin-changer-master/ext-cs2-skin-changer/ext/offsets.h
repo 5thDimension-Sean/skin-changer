@@ -1,5 +1,5 @@
-#include "a2x/client_dll.hpp"
-#include "a2x/offsets.hpp"
+#include "../src/output/client_dll.hpp"
+#include "../src/output/offsets.hpp"
 
 #pragma once
 
@@ -37,6 +37,8 @@ namespace Offsets
     constexpr std::ptrdiff_t m_EconGloves = cs2_dumper::schemas::client_dll::C_CSPlayerPawn::m_EconGloves; // C_EconItemView
     constexpr std::ptrdiff_t m_bInitialized = cs2_dumper::schemas::client_dll::C_EconItemView::m_bInitialized; // bool
     constexpr std::ptrdiff_t m_bRestoreCustomMaterialAfterPrecache = cs2_dumper::schemas::client_dll::C_EconItemView::m_bRestoreCustomMaterialAfterPrecache; // bool
+    constexpr std::ptrdiff_t m_bDisallowSOC = cs2_dumper::schemas::client_dll::C_EconItemView::m_bDisallowSOC; // bool
+    constexpr std::ptrdiff_t m_nEconGlovesChanged = cs2_dumper::schemas::client_dll::C_CSPlayerPawn::m_nEconGlovesChanged; // uint8
     constexpr std::ptrdiff_t m_iEntityQuality = cs2_dumper::schemas::client_dll::C_EconItemView::m_iEntityQuality; // int32
 
     constexpr std::ptrdiff_t m_hModel = cs2_dumper::schemas::client_dll::CModelState::m_hModel; // CModelState
@@ -64,8 +66,7 @@ namespace Offsets
     constexpr std::ptrdiff_t m_iAccountID = cs2_dumper::schemas::client_dll::C_EconItemView::m_iAccountID; // uint32
     constexpr std::ptrdiff_t m_szCustomNameOverride = cs2_dumper::schemas::client_dll::C_EconItemView::m_szCustomNameOverride; // char[161]
     constexpr std::ptrdiff_t m_iItemIDHigh = cs2_dumper::schemas::client_dll::C_EconItemView::m_iItemIDHigh; // uint32
+    constexpr std::ptrdiff_t m_iItemIDLow = cs2_dumper::schemas::client_dll::C_EconItemView::m_iItemIDLow; // uint32
 
     constexpr std::ptrdiff_t m_ModelName = cs2_dumper::schemas::client_dll::CModelState::m_ModelName; // CUtlSymbolLarge (const char*)
-    constexpr std::ptrdiff_t m_pDirtyModelData = 0xD8;
-    constexpr std::ptrdiff_t m_DrityMeshGroupMask = 0x10;
 }

@@ -5,25 +5,36 @@
 
 uintptr_t GetHudArms()
 {
-    return GetEntityByHandle(mem.Read<uint32_t>(GetLocalPlayer() + Offsets::m_hHudModelArms));
+    const uintptr_t localPlayer = GetLocalPlayer();
+    if (!localPlayer)
+        return 0;
+
+    return GetEntityByHandle(mem.Read<uint32_t>(localPlayer + Offsets::m_hHudModelArms));
 }
 
 uintptr_t GetHudWeapon(const uintptr_t weapon)
 {
     const auto& armsBase = GetHudArms();
+    if (!armsBase)
+        return 0;
+
     const auto& armsNode = mem.Read<uintptr_t>(armsBase + Offsets::m_pGameSceneNode);
+    if (!armsNode)
+        return 0;
+
     for (uintptr_t viewModel = mem.Read<uintptr_t>(armsNode + Offsets::m_pChild); viewModel; viewModel = mem.Read<uintptr_t>(viewModel + Offsets::m_pNextSibling))
     {
-        if (!viewModel || !mem.Read<uintptr_t>(viewModel + Offsets::m_pOwner))
+        const uintptr_t owner = mem.Read<uintptr_t>(viewModel + Offsets::m_pOwner);
+        if (!owner)
             continue;
 
-        if (GetEntityByHandle(mem.Read<uint32_t>(mem.Read<uintptr_t>(viewModel + Offsets::m_pOwner) + Offsets::m_hOwnerEntity)) != weapon)
+        if (GetEntityByHandle(mem.Read<uint32_t>(owner + Offsets::m_hOwnerEntity)) != weapon)
             continue;
 
-        return mem.Read<uintptr_t>(viewModel + Offsets::m_pOwner);
+        return owner;
     }
 
-    return GetHudWeapon(weapon);
+    return 0;
 }
 
 //uintptr_t GetHudWeapon(const uintptr_t& weapon)
@@ -55,10 +66,3 @@ uintptr_t GetHudWeapon(const uintptr_t weapon)
 //
 //    return weapons;
 //}
-
-static const uintptr_t pActiveHud = mem.Read<uintptr_t>(mem.ResolveRelativeAddress(mem.SigScan(L"client.dll", "48 8D 0D ? ? ? ? E8 ? ? ? ? EB ? 33 D2")) + 0x8);
-
-inline uintptr_t GetActiveHudWeapon()
-{
-    return mem.Read<uintptr_t>(pActiveHud);
-}

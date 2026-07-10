@@ -1,4 +1,5 @@
 #include <iostream>
+#include <unordered_map>
 #include <vector>
 
 #include "../../ext/skindb.h"
@@ -39,12 +40,14 @@ enum ItemAttributeDefinitions
 class CEconItemAttributeManager
 {
 private:
+	std::unordered_map<uintptr_t, uintptr_t> allocations;
+
 	template <typename T>
 	CEconItemAttribute Make(const uint16_t def, const T value)
 	{
 		float fValue = (float)value;
 
-		CEconItemAttribute attribute;
+		CEconItemAttribute attribute{};
 		attribute.defIndex = def;
 		attribute.initValue = fValue;
 		attribute.value = fValue;
@@ -94,6 +97,70 @@ public:
 		Attributes.ptr = memBlock;
 
 		mem.Write<CPtrGameVector>(item + Offsets::m_AttributeList + Offsets::m_Attributes, Attributes);
+		allocations[item] = memBlock;
+
+		std::cout << "[Attributes] created item=0x" << std::hex << item
+				  << " block=0x" << memBlock << std::dec
+				  << " count=" << attributes.size()
+				  << " paint=" << skin.Paint << std::endl;
+	}
+
+	void Replace(const uintptr_t item, const SkinInfo_t skin)
+	{
+		std::vector<CEconItemAttribute> attributes;
+		if (skin.Paint)
+		{
+			attributes.push_back(Make(ItemAttributeDefinitions::Paint, skin.Paint));
+			attributes.push_back(Make(ItemAttributeDefinitions::Pattern, 0));
+			attributes.push_back(Make(ItemAttributeDefinitions::Wear, 0.01f));
+		}
+
+		if (attributes.empty())
+			return;
+
+		const uintptr_t memBlock = mem.Allocate();
+		if (!memBlock)
+		{
+			std::cout << "[Attributes] replace allocation failed item=0x"
+					  << std::hex << item << std::dec << std::endl;
+			return;
+		}
+
+		for (uint8_t i = 0; i < attributes.size(); i++)
+			mem.Write<CEconItemAttribute>(memBlock + (i * sizeof(CEconItemAttribute)), attributes[i]);
+
+		const uintptr_t attributeAddress = item + Offsets::m_AttributeList + Offsets::m_Attributes;
+		const CPtrGameVector previous = mem.Read<CPtrGameVector>(attributeAddress);
+		mem.Write<CPtrGameVector>(attributeAddress, CPtrGameVector{ attributes.size(), memBlock });
+
+		const auto allocation = allocations.find(item);
+		bool freedPrevious = false;
+		if (allocation != allocations.end() && allocation->second == previous.ptr)
+			freedPrevious = mem.Free(previous.ptr);
+
+		allocations[item] = memBlock;
+		std::cout << "[Attributes] replaced item=0x" << std::hex << item
+				  << " oldBlock=0x" << previous.ptr
+				  << " newBlock=0x" << memBlock << std::dec
+				  << " oldCount=" << previous.size
+				  << " newCount=" << attributes.size()
+				  << " paint=" << skin.Paint
+				  << " freedOwnedOld=" << freedPrevious << std::endl;
+	}
+
+	int GetPaint(const uintptr_t item)
+	{
+		const CPtrGameVector attributes =
+			mem.Read<CPtrGameVector>(item + Offsets::m_AttributeList + Offsets::m_Attributes);
+		for (uint64_t i = 0; i < attributes.size && i < MaxEconItemAttributeManager; ++i)
+		{
+			const CEconItemAttribute attribute =
+				mem.Read<CEconItemAttribute>(attributes.ptr + (i * sizeof(CEconItemAttribute)));
+			if (attribute.defIndex == ItemAttributeDefinitions::Paint)
+				return static_cast<int>(attribute.value);
+		}
+
+		return 0;
 	}
 
 	void Remove(const uintptr_t item)
@@ -102,9 +169,14 @@ public:
 		const CPtrGameVector attributes = mem.Read<CPtrGameVector>(AttributeList);
 		if (!attributes.size) return;
 
+		const auto allocation = allocations.find(item);
+		if (allocation == allocations.end() || allocation->second != attributes.ptr)
+			return;
+
 		mem.Write<CPtrGameVector>(AttributeList, CPtrGameVector());
 
 		mem.Free(attributes.ptr);
+		allocations.erase(allocation);
 	}
 };
 CEconItemAttributeManager econItemAttributeManager;
