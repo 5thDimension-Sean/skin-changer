@@ -18,9 +18,7 @@ namespace BaseConfig {
     struct KnifeConfig {
         uint16_t defIndex;
         uint32_t paint;
-        uint32_t subclassId; // MurmurHash2 of weapon class name with seed 0x31415926
         const char* name;
-        const char* modelPath;
     };
 
     struct GloveConfig {
@@ -29,15 +27,12 @@ namespace BaseConfig {
         const char* name;
     };
 
-    // Butterfly Knife subclass: MurmurHash2("weapon_knife_butterfly", 0x31415926) = 0xF4ACCFD1
     // CT: Butterfly Knife | Black Pearl Doppler + Sport Gloves | Pandora's Box
-    inline constexpr KnifeConfig CtKnifeConfig = { 515, 417, 0xF4ACCFD1, "Butterfly Black Pearl",
-        "phase2/weapons/models/knife/knife_butterfly/weapon_knife_butterfly_ag2.vmdl" };
+    inline constexpr KnifeConfig CtKnifeConfig = { 515, 417, "Butterfly Black Pearl" };
     inline constexpr GloveConfig CtGloveConfig = { 5030, 10037, "Pandora's Box" };
 
     // T: Butterfly Knife | Gamma Doppler Emerald + Sport Gloves | Hedge Maze
-    inline constexpr KnifeConfig TKnifeConfig = { 515, 568, 0xF4ACCFD1, "Butterfly Gamma Emerald",
-        "phase2/weapons/models/knife/knife_butterfly/weapon_knife_butterfly_ag2.vmdl" };
+    inline constexpr KnifeConfig TKnifeConfig = { 515, 568, "Butterfly Gamma Emerald" };
     inline constexpr GloveConfig TGloveConfig = { 5030, 10038, "Hedge Maze" };
 
     // --- PISTOLS ---
