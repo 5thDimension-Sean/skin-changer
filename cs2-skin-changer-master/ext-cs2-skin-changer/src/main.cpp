@@ -154,20 +154,6 @@ int main()
 
     mem.Write<uint16_t>(Sigs::RegenerateWeaponSkins + 0x52, Offsets::m_AttributeManager + Offsets::m_Item + Offsets::m_AttributeList + Offsets::m_Attributes);
 
-    // Sig scan for SetModel — used for knife model injection
-    // CBaseModelEntity::SetModel typically starts with a distinctive prologue
-    uintptr_t setModelFn = mem.SigScan(L"client.dll", "48 89 5C 24 ? 48 89 6C 24 ? 56 57 41 56 48 83 EC 20 48 8B E9 48 8B FA");
-    std::cout << "[Init] SetModel sig scan: 0x" << std::hex << setModelFn << std::dec << std::endl;
-    if (!setModelFn)
-    {
-        // Try alternate sig pattern
-        setModelFn = mem.SigScan(L"client.dll", "40 53 48 83 EC 20 48 8B D9 E8 ? ? ? ? 48 8B C8 48 8B D3");
-        std::cout << "[Init] SetModel alt sig: 0x" << std::hex << setModelFn << std::dec << std::endl;
-    }
-
-    // Pre-allocate model path string in game memory (persists for the session)
-    uintptr_t modelPathAlloc = 0;
-
     skindb->Dump();
 
     BaseConfig::ApplyBaseConfig();
@@ -192,7 +178,6 @@ int main()
         OnFrame();
 
         bool ShouldUpdate = false;
-        static bool knifeModelInjected = false;
 
         const uint8_t team = mem.Read<uint8_t>(localPlayer + Offsets::m_iTeamNum);
 
@@ -212,11 +197,10 @@ int main()
                 if (weaponDefRaw != knifeConfig.defIndex || ForceUpdate)
                 {
                     std::cout << "[Knife] Team=" << (int)team
-                              << " Def=" << weaponDefRaw << "->" << knifeConfig.defIndex
-                              << " Paint=" << knifeConfig.paint
-                              << " Entity=0x" << std::hex << weapon << std::dec << std::endl;
+                              << " OrigDef=" << weaponDefRaw
+                              << " -> TargetDef=" << knifeConfig.defIndex
+                              << " Paint=" << knifeConfig.paint << std::endl;
 
-                    // Write item definition + fallback values
                     mem.Write<uint16_t>(item + Offsets::m_iItemDefinitionIndex, knifeConfig.defIndex);
                     mem.Write<uint32_t>(item + Offsets::m_iItemIDHigh, -1);
                     mem.Write<uint32_t>(weapon + Offsets::m_nFallbackPaintKit, knifeConfig.paint);
@@ -224,103 +208,10 @@ int main()
                     mem.Write<float>(weapon + Offsets::m_flFallbackWear, 0.0001f);
                     mem.Write<int32_t>(item + Offsets::m_iEntityQuality, 3);
                     mem.Write<uint32_t>(item + Offsets::m_iAccountID, 1);
-                    mem.Write<uint32_t>(weapon + Offsets::m_OriginalOwnerXuidLow, 1);
-
-                    std::cout << "[Knife] Wrote item data OK" << std::endl;
 
                     econItemAttributeManager.Create(item, SkinInfo_t{ static_cast<int>(knifeConfig.paint), false, knifeConfig.name, WeaponsEnum::CtKnife });
 
-                    // --- MODEL INJECTION via SetModel (CreateRemoteThread) ---
-                    if (setModelFn && !knifeModelInjected)
-                    {
-                        std::cout << "[ModelInject] Attempting SetModel injection..." << std::endl;
-                        std::cout << "[ModelInject] SetModel func: 0x" << std::hex << setModelFn << std::dec << std::endl;
-                        std::cout << "[ModelInject] Model path: " << knifeConfig.modelPath << std::endl;
-
-                        // Allocate model path string in game memory (once)
-                        if (!modelPathAlloc)
-                        {
-                            modelPathAlloc = mem.Allocate(0, 512);
-                            std::cout << "[ModelInject] Allocated path buffer: 0x" << std::hex << modelPathAlloc << std::dec << std::endl;
-                        }
-
-                        if (modelPathAlloc)
-                        {
-                            // Write model path string + null terminator
-                            std::string modelStr(knifeConfig.modelPath);
-                            mem.WriteString(modelPathAlloc, modelStr);
-                            mem.Write<char>(modelPathAlloc + modelStr.size(), '\0');
-
-                            // Build x64 shellcode to call SetModel(this=weapon, modelPath)
-                            // Windows x64 calling convention: rcx=this, rdx=arg1
-                            std::vector<uint8_t> shellcode;
-
-                            // sub rsp, 0x28 (shadow space + alignment)
-                            shellcode.push_back(0x48); shellcode.push_back(0x83);
-                            shellcode.push_back(0xEC); shellcode.push_back(0x28);
-
-                            // mov rcx, <weapon address> (10 bytes: 48 B9 + imm64)
-                            shellcode.push_back(0x48); shellcode.push_back(0xB9);
-                            for (int i = 0; i < 8; i++)
-                                shellcode.push_back((uint8_t)((weapon >> (i * 8)) & 0xFF));
-
-                            // mov rdx, <modelPathAlloc> (10 bytes: 48 BA + imm64)
-                            shellcode.push_back(0x48); shellcode.push_back(0xBA);
-                            for (int i = 0; i < 8; i++)
-                                shellcode.push_back((uint8_t)((modelPathAlloc >> (i * 8)) & 0xFF));
-
-                            // mov rax, <setModelFn> (10 bytes: 48 B8 + imm64)
-                            shellcode.push_back(0x48); shellcode.push_back(0xB8);
-                            for (int i = 0; i < 8; i++)
-                                shellcode.push_back((uint8_t)((setModelFn >> (i * 8)) & 0xFF));
-
-                            // call rax (2 bytes: FF D0)
-                            shellcode.push_back(0xFF); shellcode.push_back(0xD0);
-
-                            // add rsp, 0x28
-                            shellcode.push_back(0x48); shellcode.push_back(0x83);
-                            shellcode.push_back(0xC4); shellcode.push_back(0x28);
-
-                            // xor eax, eax (return 0)
-                            shellcode.push_back(0x31); shellcode.push_back(0xC0);
-
-                            // ret
-                            shellcode.push_back(0xC3);
-
-                            // Allocate and write shellcode near SetModel for cache locality
-                            uintptr_t codeAddr = mem.MakeFunction(shellcode, setModelFn);
-                            std::cout << "[ModelInject] Shellcode at: 0x" << std::hex << codeAddr << std::dec
-                                      << " (" << shellcode.size() << " bytes)" << std::endl;
-
-                            if (codeAddr)
-                            {
-                                std::cout << "[ModelInject] Executing via CreateRemoteThread..." << std::endl;
-                                mem.CallThread(codeAddr);
-                                std::cout << "[ModelInject] SetModel call completed!" << std::endl;
-                                knifeModelInjected = true;
-                                mem.Free(codeAddr);
-                            }
-                            else
-                            {
-                                std::cout << "[ModelInject] ERROR: Failed to allocate shellcode" << std::endl;
-                            }
-                        }
-                    }
-                    else if (!setModelFn)
-                    {
-                        std::cout << "[ModelInject] SKIP: SetModel sig not found (model won't change)" << std::endl;
-                    }
-
                     ShouldUpdate = true;
-                }
-                else
-                {
-                    // Def already matches — model should be applied
-                    if (knifeModelInjected)
-                    {
-                        std::cout << "[Knife] Model injection active, def stable at " << knifeConfig.defIndex << std::endl;
-                        knifeModelInjected = false; // don't spam this message
-                    }
                 }
                 continue; // skip normal skin flow for knives
             }
@@ -363,8 +254,7 @@ int main()
                 std::cout << "[Gloves] Team=" << (int)team
                           << " CurrentDef=" << currentGloveDef
                           << " -> TargetDef=" << gloveConfig.defIndex
-                          << " Paint=" << gloveConfig.paint
-                          << " Pawn=0x" << std::hex << localPlayer << std::dec << std::endl;
+                          << " Paint=" << gloveConfig.paint << std::endl;
 
                 mem.Write<uint16_t>(glovesItem + Offsets::m_iItemDefinitionIndex, gloveConfig.defIndex);
                 mem.Write<uint32_t>(glovesItem + Offsets::m_iItemIDHigh, -1);
@@ -383,11 +273,7 @@ int main()
         }
 
         if (ShouldUpdate || ForceUpdate)
-        {
-            std::cout << "[Update] Calling RegenerateWeaponSkins via CreateRemoteThread..." << std::endl;
             UpdateWeapons(weapons);
-            std::cout << "[Update] RegenerateWeaponSkins completed" << std::endl;
-        }
 
         ForceUpdate = false;
     }
