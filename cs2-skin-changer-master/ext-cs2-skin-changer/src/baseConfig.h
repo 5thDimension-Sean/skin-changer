@@ -1,6 +1,7 @@
 #pragma once
 
 #include "SDK/weapon/C_EconEntity.h"
+#include "../ext/skindb.h"
 
 // Base configuration for weapon skins with weapon definitions and skin IDs
 namespace BaseConfig {
@@ -138,5 +139,28 @@ namespace BaseConfig {
         }
 
         return CSWeaponType::WEAPONTYPE_UNKNOWN;
+    }
+
+    // Push every configured weapon skin into the skin manager so the base
+    // config is applied automatically on startup.
+    template <size_t N>
+    inline void ApplyConfigArray(const WeaponSkinConfig (&configs)[N]) {
+        for (const auto& config : configs) {
+            skinManager->AddSkin(SkinInfo_t{
+                static_cast<int>(config.skinId),
+                false,
+                config.skinName,
+                config.weapon
+            });
+        }
+    }
+
+    inline void ApplyBaseConfig() {
+        ApplyConfigArray(PistolConfigs);
+        ApplyConfigArray(SMGConfigs);
+        ApplyConfigArray(RifleConfigs);
+        ApplyConfigArray(SniperConfigs);
+        ApplyConfigArray(ShotgunConfigs);
+        ApplyConfigArray(MachinegunConfigs);
     }
 }
