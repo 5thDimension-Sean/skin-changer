@@ -37,45 +37,45 @@ namespace BaseConfig {
 
     // --- PISTOLS ---
     constexpr WeaponSkinConfig PistolConfigs[] = {
-        { WeaponsEnum::Deagle, 37, "Deagle", "Deagle Skin", false },
-        { WeaponsEnum::Elite, 196, "Elite", "Elite Skin", false },
+        { WeaponsEnum::Deagle, 962, "Desert Eagle", "Printstream", true },
+        { WeaponsEnum::Elite, 196, "Dual Berettas", "Elite Skin", false },
         { WeaponsEnum::FiveSeven, 274, "Five-Seven", "Five-Seven Skin", false },
-        { WeaponsEnum::Glock, 1119, "Glock-18", "Glock-18 Skin", false },
-        { WeaponsEnum::Tec9, 889, "Tec-9", "Tec-9 Skin", false },
-        { WeaponsEnum::P200, 389, "P250", "P250 Skin", false },
-        { WeaponsEnum::p250, 749, "P250", "P250 Skin", false },
-        { WeaponsEnum::UspS, 1065, "USP-S", "USP-S Skin", false },
-        { WeaponsEnum::Cz65A, 325, "CZ75-Auto", "CZ75-Auto Skin", false },
+        { WeaponsEnum::Glock, 1119, "Glock-18", "Gamma Doppler Emerald", true },
+        { WeaponsEnum::Tec9, 459, "Tec-9", "Bamboo Forest", true },
+        { WeaponsEnum::P200, 32, "P2000", "Silver", false },
+        { WeaponsEnum::p250, 102, "P250", "Whiteout", false },
+        { WeaponsEnum::UspS, 1065, "USP-S", "Whiteout", false },
+        { WeaponsEnum::Cz65A, 32, "CZ75-Auto", "Silver", false },
         { WeaponsEnum::Revolver, 522, "R8 Revolver", "R8 Revolver Skin", false },
     };
 
     // --- SMGS ---
     constexpr WeaponSkinConfig SMGConfigs[] = {
-        { WeaponsEnum::Mac10, 433, "MAC-10", "MAC-10 Skin", false },
-        { WeaponsEnum::Mp7, 696, "MP7", "MP7 Skin", false },
-        { WeaponsEnum::Mp9, 33, "MP9", "MP9 Skin", false },
-        { WeaponsEnum::P90, 359, "P90", "P90 Skin", false },
+        { WeaponsEnum::Mac10, 32, "MAC-10", "Silver", false },
+        { WeaponsEnum::Mp7, 102, "MP7", "Whiteout", false },
+        { WeaponsEnum::Mp9, 609, "MP9", "Airlock", true },
+        { WeaponsEnum::P90, 359, "P90", "Asiimov", true },
         { WeaponsEnum::Bizon, 542, "PP-Bizon", "PP-Bizon Skin", false },
-        { WeaponsEnum::Ump45, 879, "UMP-45", "UMP-45 Skin", false },
+        { WeaponsEnum::Ump45, 441, "UMP-45", "Labyrinth", true },
         { WeaponsEnum::Mp5SD, 888, "MP5-SD", "MP5-SD Skin", false },
     };
 
     // --- RIFLES ---
     constexpr WeaponSkinConfig RifleConfigs[] = {
-        { WeaponsEnum::Ak47, 921, "AK-47", "AK-47 Skin", false },
-        { WeaponsEnum::Famas, 604, "FAMAS", "FAMAS Skin", false },
-        { WeaponsEnum::Galil, 428, "Galil AR", "Galil AR Skin", false },
-        { WeaponsEnum::Aug, 33, "AUG", "AUG Skin", false },
-        { WeaponsEnum::Sg556, 487, "SG 553", "SG 553 Skin", false },
-        { WeaponsEnum::M4A4, 309, "M4A4", "M4A4 Skin", false },
-        { WeaponsEnum::M4A1Silencer, 984, "M4A1-S", "M4A1-S Skin", false },
+        { WeaponsEnum::Ak47, 801, "AK-47", "Asiimov", true },
+        { WeaponsEnum::Famas, 626, "FAMAS", "Mecha Industries", true },
+        { WeaponsEnum::Galil, 297, "Galil AR", "Tuxedo", false },
+        { WeaponsEnum::Aug, 305, "AUG", "Torque", true },
+        { WeaponsEnum::Sg556, 61, "SG 553", "Hypnotic", false },
+        { WeaponsEnum::M4A4, 309, "M4A4", "Howl", true },
+        { WeaponsEnum::M4A1Silencer, 587, "M4A1-S", "Mecha Industries", true },
     };
 
     // --- SNIPERS ---
     constexpr WeaponSkinConfig SniperConfigs[] = {
         { WeaponsEnum::Awp, 344, "AWP", "Dragon Lore", true },
-        { WeaponsEnum::Ssg08, 624, "SSG 08", "SSG 08 Skin", false },
-        { WeaponsEnum::Scar20, 165, "SCAR-20", "SCAR-20 Skin", false },
+        { WeaponsEnum::Ssg08, 253, "SSG 08", "Acid Fade", false },
+        { WeaponsEnum::Scar20, 597, "SCAR-20", "Bloodsport", true },
         { WeaponsEnum::G3Sg1, 493, "G3SG1", "G3SG1 Skin", false },
     };
 
@@ -83,7 +83,7 @@ namespace BaseConfig {
     constexpr WeaponSkinConfig ShotgunConfigs[] = {
         { WeaponsEnum::Nova, 62, "Nova", "Nova Skin", false },
         { WeaponsEnum::Xm1014, 393, "XM1014", "XM1014 Skin", false },
-        { WeaponsEnum::Mag7, 948, "MAG-7", "MAG-7 Skin", false },
+        { WeaponsEnum::Mag7, 32, "MAG-7", "Silver", false },
         { WeaponsEnum::Sawedoof, 256, "Sawed-Off", "Sawed-Off Skin", false },
     };
 
