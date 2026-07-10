@@ -178,11 +178,45 @@ int main()
 
         bool ShouldUpdate = false;
 
+        const uint8_t team = mem.Read<uint8_t>(localPlayer + Offsets::m_iTeamNum);
+
         const std::vector<uintptr_t> weapons = GetWeapons(localPlayer);
         for (const uintptr_t weapon : weapons)
         {
             const uintptr_t item = weapon + Offsets::m_AttributeManager + Offsets::m_Item;
-            
+
+            // Read def index BEFORE "already applied" check to always detect knives
+            const uint16_t weaponDefRaw = mem.Read<uint16_t>(item + Offsets::m_iItemDefinitionIndex);
+
+            // --- KNIFE HANDLING (processed every frame, not gated by iItemIDHigh) ---
+            if (BaseConfig::IsKnife(weaponDefRaw))
+            {
+                const auto& knifeConfig = (team == 3) ? BaseConfig::CtKnifeConfig : BaseConfig::TKnifeConfig;
+
+                // Only write if def doesn't match target or force update
+                if (weaponDefRaw != knifeConfig.defIndex || ForceUpdate)
+                {
+                    std::cout << "[Knife] Team=" << (int)team
+                              << " OrigDef=" << weaponDefRaw
+                              << " -> TargetDef=" << knifeConfig.defIndex
+                              << " Paint=" << knifeConfig.paint << std::endl;
+
+                    mem.Write<uint16_t>(item + Offsets::m_iItemDefinitionIndex, knifeConfig.defIndex);
+                    mem.Write<uint32_t>(item + Offsets::m_iItemIDHigh, -1);
+                    mem.Write<uint32_t>(weapon + Offsets::m_nFallbackPaintKit, knifeConfig.paint);
+                    mem.Write<uint32_t>(weapon + Offsets::m_nFallbackSeed, 0);
+                    mem.Write<float>(weapon + Offsets::m_flFallbackWear, 0.0001f);
+                    mem.Write<int32_t>(item + Offsets::m_iEntityQuality, 3);
+                    mem.Write<uint32_t>(item + Offsets::m_iAccountID, 1);
+
+                    econItemAttributeManager.Create(item, SkinInfo_t{ static_cast<int>(knifeConfig.paint), false, knifeConfig.name, WeaponsEnum::CtKnife });
+
+                    ShouldUpdate = true;
+                }
+                continue; // skip normal skin flow for knives
+            }
+
+            // --- NORMAL WEAPON SKIN (gated by iItemIDHigh) ---
             if(ForceUpdate)
                 mem.Write<uint32_t>(item + Offsets::m_iItemIDHigh, NULL);
 
@@ -191,29 +225,6 @@ int main()
 
             mem.Write<uint32_t>(item + Offsets::m_iItemIDHigh, -1);
 
-            // --- KNIFE HANDLING ---
-            const uint16_t weaponDefRaw = mem.Read<uint16_t>(item + Offsets::m_iItemDefinitionIndex);
-            if (BaseConfig::IsKnife(weaponDefRaw))
-            {
-                const uint8_t team = mem.Read<uint8_t>(localPlayer + Offsets::m_iTeamNum);
-                const auto& knifeConfig = (team == 3) ? BaseConfig::CtKnifeConfig : BaseConfig::TKnifeConfig;
-
-                mem.Write<uint16_t>(item + Offsets::m_iItemDefinitionIndex, knifeConfig.defIndex);
-                mem.Write<uint32_t>(weapon + Offsets::m_nFallbackPaintKit, knifeConfig.paint);
-                mem.Write<int32_t>(item + Offsets::m_iEntityQuality, 3);
-                mem.Write<uint32_t>(item + Offsets::m_iAccountID, 1);
-
-                const uintptr_t hudWeapon = GetHudWeapon(weapon);
-                SetMeshMask(weapon, 1);
-                SetMeshMask(hudWeapon, 1);
-
-                econItemAttributeManager.Create(item, SkinInfo_t{ static_cast<int>(knifeConfig.paint), false, knifeConfig.name, WeaponsEnum::CtKnife });
-
-                ShouldUpdate = true;
-                continue;
-            }
-
-            // --- NORMAL WEAPON SKIN ---
             SkinInfo_t skin = GetSkin(item);
             if (!skin.Paint)
                 continue;
@@ -231,16 +242,20 @@ int main()
             ShouldUpdate = true;
         }
 
-        // --- GLOVE APPLICATION ---
+        // --- GLOVE APPLICATION (check def index, not iItemIDHigh) ---
         {
-            const uint8_t team = mem.Read<uint8_t>(localPlayer + Offsets::m_iTeamNum);
             const auto& gloveConfig = (team == 3) ? BaseConfig::CtGloveConfig : BaseConfig::TGloveConfig;
 
             const uintptr_t glovesItem = localPlayer + Offsets::m_EconGloves;
+            const uint16_t currentGloveDef = mem.Read<uint16_t>(glovesItem + Offsets::m_iItemDefinitionIndex);
 
-            const uint32_t gloveItemIDHigh = mem.Read<uint32_t>(glovesItem + Offsets::m_iItemIDHigh);
-            if (gloveItemIDHigh != static_cast<uint32_t>(-1) || ForceUpdate)
+            if (currentGloveDef != gloveConfig.defIndex || ForceUpdate)
             {
+                std::cout << "[Gloves] Team=" << (int)team
+                          << " CurrentDef=" << currentGloveDef
+                          << " -> TargetDef=" << gloveConfig.defIndex
+                          << " Paint=" << gloveConfig.paint << std::endl;
+
                 mem.Write<uint16_t>(glovesItem + Offsets::m_iItemDefinitionIndex, gloveConfig.defIndex);
                 mem.Write<uint32_t>(glovesItem + Offsets::m_iItemIDHigh, -1);
                 mem.Write<bool>(glovesItem + Offsets::m_bInitialized, true);
