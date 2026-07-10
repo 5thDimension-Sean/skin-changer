@@ -153,6 +153,11 @@ int main()
     //
 
     mem.Write<uint16_t>(Sigs::RegenerateWeaponSkins + 0x52, Offsets::m_AttributeManager + Offsets::m_Item + Offsets::m_AttributeList + Offsets::m_Attributes);
+
+    // Cache engine2.dll base for full update forcing
+    const uintptr_t engine2 = mem.GetModuleBase(L"engine2.dll");
+    std::cout << "[Init] engine2.dll base: 0x" << std::hex << engine2 << std::dec << std::endl;
+
     skindb->Dump();
 
     BaseConfig::ApplyBaseConfig();
@@ -179,6 +184,7 @@ int main()
         bool ShouldUpdate = false;
         static int knifeRetryCount = 0;
         static int gloveRetryCount = 0;
+        static bool needsFullUpdate = false;
 
         const uint8_t team = mem.Read<uint8_t>(localPlayer + Offsets::m_iTeamNum);
 
@@ -237,14 +243,14 @@ int main()
 
                     econItemAttributeManager.Create(item, SkinInfo_t{ static_cast<int>(knifeConfig.paint), false, knifeConfig.name, WeaponsEnum::CtKnife });
 
+                    needsFullUpdate = true;
                     ShouldUpdate = true;
                 }
                 else
                 {
-                    // Knife is applied — reset retry counter
                     if (knifeRetryCount > 0)
                     {
-                        std::cout << "[Knife] Model applied successfully after " << knifeRetryCount << " attempts" << std::endl;
+                        std::cout << "[Knife] Subclass matched after " << knifeRetryCount << " attempts (model may still need full update)" << std::endl;
                         knifeRetryCount = 0;
                     }
                 }
@@ -306,6 +312,7 @@ int main()
                 std::cout << "[Gloves] Wrote def=" << gloveConfig.defIndex
                           << " paint=" << gloveConfig.paint
                           << " NeedToReApply=true" << std::endl;
+                needsFullUpdate = true;
                 ShouldUpdate = true;
             }
             else
@@ -323,6 +330,33 @@ int main()
             std::cout << "[Update] Calling RegenerateWeaponSkins via CreateRemoteThread..." << std::endl;
             UpdateWeapons(weapons);
             std::cout << "[Update] RegenerateWeaponSkins completed" << std::endl;
+        }
+
+        // Force full client update to rebuild entities with new definitions (model swap)
+        if (needsFullUpdate)
+        {
+            Sleep(50); // small delay to let RegenerateWeaponSkins finish
+
+            const uintptr_t networkClient = mem.Read<uintptr_t>(engine2 + Offsets::dwNetworkGameClient);
+            std::cout << "[FullUpdate] NetworkGameClient=0x" << std::hex << networkClient << std::dec << std::endl;
+
+            if (networkClient)
+            {
+                const int32_t currentDelta = mem.Read<int32_t>(networkClient + Offsets::dwNetworkGameClient_deltaTick);
+                std::cout << "[FullUpdate] Current deltaTick=" << currentDelta << " -> writing -1 to force full update" << std::endl;
+
+                mem.Write<int32_t>(networkClient + Offsets::dwNetworkGameClient_deltaTick, -1);
+
+                const int32_t verifyDelta = mem.Read<int32_t>(networkClient + Offsets::dwNetworkGameClient_deltaTick);
+                std::cout << "[FullUpdate] Verify deltaTick=" << verifyDelta << " (should be -1)" << std::endl;
+                std::cout << "[FullUpdate] Full update triggered — entities will rebuild next tick" << std::endl;
+            }
+            else
+            {
+                std::cout << "[FullUpdate] ERROR: NetworkGameClient is null!" << std::endl;
+            }
+
+            needsFullUpdate = false;
         }
 
         ForceUpdate = false;

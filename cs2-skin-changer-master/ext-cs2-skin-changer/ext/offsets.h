@@ -11,6 +11,10 @@ namespace Offsets
     constexpr std::ptrdiff_t dwLocalPlayerController = cs2_dumper::offsets::client_dll::dwLocalPlayerController;
     constexpr std::ptrdiff_t dwLocalPlayerPawn = cs2_dumper::offsets::client_dll::dwLocalPlayerPawn;
 
+    // engine2.dll offsets for forcing full client update
+    constexpr std::ptrdiff_t dwNetworkGameClient = cs2_dumper::offsets::engine2_dll::dwNetworkGameClient;
+    constexpr std::ptrdiff_t dwNetworkGameClient_deltaTick = cs2_dumper::offsets::engine2_dll::dwNetworkGameClient_deltaTick;
+
     ///////////////////////////////////////////////////////////
 
     constexpr std::ptrdiff_t m_pInventoryServices = cs2_dumper::schemas::client_dll::CCSPlayerController::m_pInventoryServices; // CCSPlayerController_InventoryServices*
